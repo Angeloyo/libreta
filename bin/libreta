@@ -1,0 +1,3 @@
+#!/bin/sh
+# Runs the libreta CLI from this checkout. Put this folder on your PATH, or run: npm link
+exec node "$(dirname "$(readlink -f "$0")")/../src/cli/main.ts" "$@"

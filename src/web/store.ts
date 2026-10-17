@@ -1,0 +1,152 @@
+// The browser's state: the library, the open board, and the connection to the server.
+// Edits are applied locally first (same engine as the server), then sent as ops.
+
+import { useSyncExternalStore } from 'react'
+import { apply } from '../core/apply.ts'
+import type { Board, Rect, Shape } from '../core/model.ts'
+import type { Op } from '../core/ops.ts'
+import type { Entry } from '../server/library.ts'
+
+export interface State {
+  connected: boolean
+  library: Entry[]
+  /** Path of the open board, e.g. "Work/Checkout flow". */
+  path?: string
+  board?: Board
+  /** Who made the latest change: lets the canvas animate the agent's work. */
+  lastBy?: 'human' | 'agent'
+  /** The agent's most recent change, for the "undo Claude" button. */
+  agentRev?: number
+  errors: string[]
+}
+
+let state: State = { connected: false, library: [], errors: [] }
+const listeners = new Set<() => void>()
+let socket: WebSocket | undefined
+/** What the human is looking at and has selected; sent to the server for the agent. */
+let presence: { view?: Rect; selection?: string[] } = {}
+
+function set(patch: Partial<State>): void {
+  state = { ...state, ...patch }
+  for (const l of listeners) l()
+}
+
+export function useStore(): State {
+  return useSyncExternalStore(
+    (l) => (listeners.add(l), () => listeners.delete(l)),
+    () => state,
+  )
+}
+
+export const getState = () => state
+
+function send(message: object): void {
+  if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message))
+}
+
+type ServerMessage =
+  | { type: 'library'; tree: Entry[] }
+  | { type: 'sync'; path: string; name: string; rev: number; shapes: Shape[]; last?: 'human' | 'agent' }
+  | { type: 'navigate'; path: string }
+  | { type: 'renamed'; from: string; to: string }
+  | { type: 'gone'; path: string }
+  | { type: 'error'; errors: string[] }
+  | { type: 'applied'; rev: number; as: 'edit' | 'undo' | 'redo' }
+
+export function connect(): void {
+  const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`
+  socket = new WebSocket(url)
+  socket.onopen = () => {
+    set({ connected: true })
+    if (state.path) {
+      send({ type: 'open', path: state.path })
+      send({ type: 'presence', ...presence })
+    }
+  }
+  socket.onclose = () => {
+    set({ connected: false })
+    setTimeout(connect, 1000)
+  }
+  socket.onmessage = (event) => {
+    const msg = JSON.parse(event.data) as ServerMessage
+    if (msg.type === 'library') set({ library: msg.tree })
+    else if (msg.type === 'sync') {
+      if (msg.path !== state.path) return // a late message from the board we just left
+      set({ board: { name: msg.name, rev: msg.rev, shapes: msg.shapes, log: [] }, lastBy: msg.last, agentRev: msg.last === 'agent' ? msg.rev : state.agentRev })
+    } else if (msg.type === 'renamed' && msg.from === state.path) {
+      set({ path: msg.to })
+      history.replaceState(null, '', toHash(msg.to))
+    } else if (msg.type === 'navigate') location.hash = toHash(msg.path)
+    else if (msg.type === 'gone' && msg.path === state.path) {
+      location.hash = ''
+      set({ path: undefined, board: undefined })
+    } else if (msg.type === 'error') set({ errors: msg.errors })
+    else if (msg.type === 'applied') {
+      // Our own change landed: remember it so ⌘Z can undo it.
+      if (msg.as === 'undo') redoStack.push(msg.rev)
+      else undoStack.push(msg.rev)
+      if (msg.as === 'edit') redoStack.length = 0
+    }
+  }
+}
+
+export function openBoard(path: string | undefined): void {
+  if (path === state.path) return
+  set({ path, board: undefined, errors: [], agentRev: undefined })
+  presence = {}
+  undoStack.length = redoStack.length = 0
+  if (path) send({ type: 'open', path })
+}
+
+/** Applies a human edit locally right away, and sends it to the server. */
+export function edit(ops: Op[], label?: string): void {
+  if (!state.board || !ops.length) return
+  const result = apply(state.board, ops, { by: 'human', label })
+  if (!result.ok) {
+    set({ errors: result.errors })
+    return
+  }
+  set({ board: result.board, lastBy: 'human', errors: [] })
+  send({ type: 'ops', ops, label })
+}
+
+// Revs of this browser's own changes (and of its undos), newest last.
+const undoStack: number[] = []
+const redoStack: number[] = []
+
+export function undo(): void {
+  const rev = undoStack.pop()
+  if (rev !== undefined) send({ type: 'undo', rev, as: 'undo' })
+}
+
+export function redo(): void {
+  const rev = redoStack.pop()
+  if (rev !== undefined) send({ type: 'undo', rev, as: 'redo' })
+}
+
+/** Rejects the agent's latest change (sent as a human undo, so it can itself be undone). */
+export function undoAgent(rev: number): void {
+  send({ type: 'undo', rev, as: 'edit' })
+}
+
+let presenceTimer: ReturnType<typeof setTimeout> | undefined
+
+/** Tells the server what the human is looking at and has selected (throttled). */
+export function reportPresence(patch: { view?: Rect; selection?: string[] }): void {
+  presence = { ...presence, ...patch }
+  if (presenceTimer) return
+  presenceTimer = setTimeout(() => {
+    presenceTimer = undefined
+    send({ type: 'presence', ...presence })
+  }, 250)
+}
+
+export const toHash = (path: string) => '#/' + path.split('/').map(encodeURIComponent).join('/')
+export const fromHash = (hash: string) => decodeURIComponent(hash.replace(/^#\/?/, '')) || undefined
+
+export async function libraryAction(action: string, body: { path?: string; to?: string }): Promise<string> {
+  const res = await fetch('/api/library', { method: 'POST', body: JSON.stringify({ action, ...body }) })
+  const text = await res.text()
+  if (!res.ok) throw new Error(text)
+  return text
+}

@@ -1,0 +1,5 @@
+{
+  "permissions": {
+    "allow": ["Bash(libreta:*)", "Bash(./bin/libreta:*)", "Read(//private/var/folders/**)", "Read(//var/folders/**)"]
+  }
+}
