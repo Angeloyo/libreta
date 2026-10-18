@@ -1,6 +1,6 @@
 ---
 name: libreta
-description: Draw on Libreta, a whiteboard the user and Claude share. Use it whenever an idea is easier to see than read — architecture, flows, plans, comparisons, explanations for a visual learner — or when the user mentions their board, a sketch, or "look at this". Drives the `libreta` CLI.
+description: Draw on Libreta, a whiteboard you share with the user. Use it whenever an idea is easier to see than read — architecture, flows, plans, comparisons, explanations for a visual learner — or when the user mentions their board, a sketch, or "look at this". Drives the `libreta` CLI.
 ---
 
 # Libreta: drawing with the human
@@ -9,6 +9,12 @@ Libreta is a whiteboard open in the human's browser. You draw on it with the `li
 they see every change live and edit the same board by hand. You describe **what** to draw and
 **where relative to other things**; the engine handles pixels: text sizing, layout, arrows
 that attach to shapes and route around them, and overlap checks.
+
+**The conversation stays in chat; the board is what you both look at.** Questions and answers go
+in chat, like always. The board shows the idea: you draw what you're explaining, and the human
+marks it up (circles, arrows, moves, quick sketches) to point at things or to sketch their own idea,
+then talks to you about it in chat. Don't ask or answer questions on the board with stickies, and
+don't hold a conversation there.
 
 ## The loop
 
@@ -20,7 +26,7 @@ that attach to shapes and route around them, and overlap checks.
 3. Read the reply: what changed, and `problems:`. Fix problems before moving on. If it starts with
    "⚠ before your change, the human had edited the board", you skipped step 1: look at what they
    did and make sure your change still makes sense.
-4. `libreta look` once at the end of a big change, and open the PNG with your Read tool to
+4. `libreta look` once at the end of a big change, and open the PNG it prints (it's an image) to
    check it reads well. Don't use screenshots to hunt for overlaps; `problems:` is exact.
 5. Then just answer and stop. **Don't watch the board**: the human edits at their own pace and
    tells you when to look. Only if they ask you to react live ("watch the board", "tell me when I
@@ -136,7 +142,8 @@ EOF
 - Color carries meaning. Pick one color per role and keep it: e.g. blue for clients, violet for
   services, green for data stores, orange for things that are new or changed, red for problems.
   Most shapes should stay black.
-- Use `sticky` (yellow) for open questions, decisions and TODOs addressed to the human.
+- Use `sticky` (yellow) for a short aside that belongs on the drawing, like an assumption or a
+  caveat. Questions for the human go in chat.
 - Use `dashed` arrows for async or optional paths and solid ones for the main path.
 - Build big explanations step by step: frame 1, then frame 2 below it, and so on. The human
   watches each part appear (their view follows what you draw).
@@ -147,14 +154,16 @@ EOF
 ## Working with the human
 
 How their edits reach you (from `libreta changes`, `libreta read`, and at the top of your replies):
-- `+ sticky h3 "…" · right of q3, outside frame qs`: a new shape and what it's next to. A sticky
-  next to your question is usually their answer to it.
+- `+ sticky h3 "…" · right of q3, outside frame qs`: a new shape and what it's next to. Their
+  chat message usually says what it's for.
 - `q4 text "…" → "…"` (or `text: appended "…"` for long texts): they edited your words.
 - `+ pen h5 circles q2` / `crosses out q5` / `strikes through x` / `underlines x` /
   `line from a to b`: what a freehand stroke marks. Crossed out usually means "drop this",
   circled or underlined means "this one". If unsure, say how you read it on the board.
 - `+ h7 h6 -> known`: they drew an arrow from their note to one of your shapes: the note is
   about that shape.
+- When their message says "this", "here" or "why does it…", look at what they just marked or
+  selected: that's what they mean. Answer in chat, and update the drawing if the answer changes it.
 - `selection changed: nothing → [q1]`: they are pointing at q1 right now.
 - Shapes they create get ids `h1`, `h2`, …
 - `libreta history "<board>"` lists who changed what, newest first (`rev 21 · human · Connected

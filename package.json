@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "An AI-first whiteboard: you and Claude draw on the same board.",
+  "description": "An AI-first whiteboard: you and your AI agent draw on the same board.",
   "bin": {
     "libreta": "src/cli/main.ts"
   },

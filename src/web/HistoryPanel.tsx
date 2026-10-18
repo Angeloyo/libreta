@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { HistoryEntry } from '../core/history.ts'
 import type { State } from './store.ts'
-import { restoreRev, showRev, toggleHistory } from './store.ts'
+import { agentLabel, restoreRev, showRev, toggleHistory } from './store.ts'
 
 const ago = (ms: number) => {
   const s = Math.round((Date.now() - ms) / 1000)
@@ -14,7 +14,7 @@ const ago = (ms: number) => {
   return new Date(ms).toLocaleDateString()
 }
 
-const who = (e: HistoryEntry) => (e.by === 'human' ? 'You' : e.agent ? e.agent[0].toUpperCase() + e.agent.slice(1) : 'Agent')
+const who = (e: HistoryEntry) => (e.by === 'human' ? 'You' : agentLabel(e.agent))
 
 function counts(e: HistoryEntry): string {
   const { added, edited, removed } = e.counts

@@ -75,7 +75,7 @@ function scopeIds(room: Room, scope: string | null): Set<string> | undefined {
 }
 
 export function read(room: Room, q: URLSearchParams): string {
-  const agent = q.get('agent') ?? 'claude'
+  const agent = q.get('agent') ?? 'agent'
   const only = scopeIds(room, q.get('scope'))
   const problems = lint(room.board).filter((p) => !only || p.ids.some((id) => only.has(id)))
   const seen = seenBy(room, agent)
@@ -97,7 +97,7 @@ export function read(room: Room, q: URLSearchParams): string {
  * board. Cheap enough to run at the start of every turn.
  */
 export function changes(room: Room, q: URLSearchParams): string {
-  const agent = q.get('agent') ?? 'claude'
+  const agent = q.get('agent') ?? 'agent'
   const seen = seenBy(room, agent)
   if (seen === undefined) return `you haven't looked at "${room.path}" yet — start with: libreta read "${room.path}"`
   const lines = humanChangesSince(room.board, seen)
@@ -158,7 +158,7 @@ function applyText(room: Room, agent: string, result: ApplyResult, dry: boolean)
 }
 
 export function applyOps(room: Room, q: URLSearchParams, body: string): string {
-  const agent = q.get('agent') ?? 'claude'
+  const agent = q.get('agent') ?? 'agent'
   const parsed = parseBody(body)
   if (parsed.errors.length) throw failed(parsed.errors)
   const dry = q.get('dry') === '1'
@@ -175,7 +175,7 @@ export function applyOps(room: Room, q: URLSearchParams, body: string): string {
 }
 
 export async function diagram(room: Room, q: URLSearchParams, body: string): Promise<string> {
-  const agent = q.get('agent') ?? 'claude'
+  const agent = q.get('agent') ?? 'agent'
   const parsed = parseBody(body)
   if (parsed.errors.length) throw failed(parsed.errors)
   const frameId = q.get('frame')
@@ -215,7 +215,7 @@ export function history(room: Room, q: URLSearchParams): string {
 
 /** Reverts a changeset: by default the agent's own latest one. */
 export function undo(room: Room, q: URLSearchParams): string {
-  const agent = q.get('agent') ?? 'claude'
+  const agent = q.get('agent') ?? 'agent'
   const rev = q.get('rev') ? Number(q.get('rev')) : room.board.log.findLast((cs) => cs.by === 'agent' && !cs.label?.startsWith('undo'))?.rev
   if (rev === undefined) throw new UserError('nothing of yours to undo in the recent history')
   const result = revertInRoom(room, rev, 'agent', agent)
@@ -247,7 +247,7 @@ export function look(room: Room, q: URLSearchParams): string {
  * Resolves null on timeout; the CLI asks again until its own timeout runs out.
  */
 export function wait(room: Room, q: URLSearchParams, signal: AbortSignal): Promise<string | null> {
-  const agent = q.get('agent') ?? 'claude'
+  const agent = q.get('agent') ?? 'agent'
   const timeout = Math.min(Number(q.get('timeout') ?? 240), 240) * 1000
   const seen = seenBy(room, agent) ?? room.board.rev
   markSeen(room, agent, seen)

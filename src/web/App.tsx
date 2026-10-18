@@ -4,7 +4,7 @@ import type { Editor } from './canvas/editor.ts'
 import type { CanvasView } from './canvas/view.ts'
 import { Sidebar } from './Sidebar.tsx'
 import { HistoryPanel } from './HistoryPanel.tsx'
-import { connect, fromHash, openBoard, toggleHistory, undoAgent, useStore } from './store.ts'
+import { agentLabel, connect, fromHash, openBoard, toggleHistory, undoAgent, useStore } from './store.ts'
 
 export function App() {
   const state = useStore()
@@ -30,8 +30,8 @@ export function App() {
           <span className="spacer" />
           {state.errors.length > 0 && <span className="error">{state.errors[0]}</span>}
           {state.agentRev !== undefined && state.lastBy === 'agent' && (
-            <button className="agent" onClick={() => undoAgent(state.agentRev!)} title="Undo Claude's latest change">
-              ✦ Claude changed this · Undo
+            <button className="agent" onClick={() => undoAgent(state.agentRev!)} title={`Undo ${agentLabel(state.agentName)}'s latest change`}>
+              ✦ {agentLabel(state.agentName)} changed this · Undo
             </button>
           )}
           {state.board && (

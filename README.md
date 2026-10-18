@@ -1,14 +1,15 @@
 # Libreta
 
-A whiteboard you and Claude draw on together. Claude draws through the `libreta` CLI; you see it
-live in the browser and edit the same board by hand; Claude sees your edits.
+A whiteboard you and your AI agent draw on together. The agent draws through the `libreta` CLI;
+you see it live in the browser and edit the same board by hand; the agent sees your edits. Any
+agent that can run shell commands works: Claude Code, Codex, Cursor, and so on.
 
 ```
  Browser: canvas + editor + board library
       ▲ WebSocket (changes, what you're looking at, your selection)
  Server (localhost:4747): the boards, layout, checks, PNG renders, change log
       ▲ HTTP
- libreta CLI  ◄── Claude Code (via the libreta skill)
+ libreta CLI  ◄── your agent (Claude Code via the skill; others via `libreta guide`)
 ```
 
 ## Setup
@@ -28,20 +29,30 @@ To let Claude Code use it in any project, link the skill:
 ln -s "$PWD/.claude/skills/libreta" ~/.claude/skills/libreta
 ```
 
+For any other agent, add this to its global instructions (for Codex, `~/.codex/AGENTS.md`):
+
+```md
+When an idea is easier to see than read (architecture, flows, plans, comparisons), draw it on
+the Libreta whiteboard with the `libreta` CLI. Run `libreta guide` once per session and follow it.
+```
+
+and set `LIBRETA_AGENT` to its name (`export LIBRETA_AGENT=codex`) so History shows who did what.
+Inside Claude Code the name is set for you.
+
 ## Using it
 
 ```sh
 libreta new "Ideas/First board" --open   # the server starts by itself
 ```
 
-Then ask Claude to explain something on the board. Claude will:
+Then ask your agent to explain something on the board. It will:
 
 - run `libreta read` to see the board, what you have selected, and what you changed
 - draw with `libreta diagram` (auto-laid-out graphs) or `libreta apply` (anything else)
 - check its work with `libreta look` (a PNG of the board)
 - check what you changed (`libreta changes`) at the start of each turn, so you can edit at your
-  own pace and just tell Claude when to look (ask it to "watch the board" if you want it to react
-  live instead)
+  own pace and just tell it when to look (ask it to "watch the board" if you want it to react live
+  instead)
 
 In the browser:
 
@@ -64,7 +75,7 @@ In the browser:
 | space-drag, scroll | pan |
 | ⌘-scroll, pinch | zoom |
 
-The "Claude changed this · Undo" button rejects Claude's latest change.
+The "✦ Claude changed this · Undo" button (named after your agent) rejects its latest change.
 
 **History** (top right) lists who did what, newest first:
 
@@ -72,7 +83,7 @@ The "Claude changed this · Undo" button rejects Claude's latest change.
 - Click it to see the board as it was then. "Restore this" makes that the current version; it's undoable.
 - Press ▶ to replay the board being built, step by step.
 
-Claude can see the same list with `libreta history`.
+Your agent can see the same list with `libreta history`.
 
 ## Development
 
@@ -97,7 +108,7 @@ Code map:
 - `src/web`: the React app
   - `canvas/view.ts`: rendering and camera
   - `canvas/editor.ts`: tools and gestures
-- `.claude/skills/libreta/SKILL.md`: how Claude should use it (also printed by `libreta guide`)
+- `.claude/skills/libreta/SKILL.md`: how the agent should use it (also printed by `libreta guide`)
 
 ## Credits
 

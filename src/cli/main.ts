@@ -13,7 +13,7 @@ const PORT = Number(process.env.LIBRETA_PORT ?? 4747)
 const BASE = `http://127.0.0.1:${PORT}`
 const SERVER = fileURLToPath(new URL('../server/main.ts', import.meta.url))
 
-const HELP = `libreta — a whiteboard you and Claude draw on together
+const HELP = `libreta — a whiteboard you and your AI agent draw on together
 
 boards
   libreta ls                         list folders and boards
@@ -36,7 +36,7 @@ drawing (board defaults to the one open in the browser)
   libreta guide                      how to draw well with libreta (read this first)
 
   libreta serve                      run the server in the foreground
-options: --agent <name> (default: claude, or $LIBRETA_AGENT)`
+options: --agent <name> (default: $LIBRETA_AGENT, else "claude" inside Claude Code, else "agent")`
 
 async function ensureServer(): Promise<void> {
   if (await healthy()) return
@@ -130,7 +130,8 @@ async function main(): Promise<void> {
     },
   })
   const [command, a, b] = positionals
-  const agent = opt.agent ?? process.env.LIBRETA_AGENT ?? 'claude'
+  // The name history shows for this agent's changes. Claude Code marks its shells with CLAUDECODE=1.
+  const agent = opt.agent ?? process.env.LIBRETA_AGENT ?? (process.env.CLAUDECODE ? 'claude' : 'agent')
   const board = a
 
   if (!command || opt.help || command === 'help') return void console.log(HELP)

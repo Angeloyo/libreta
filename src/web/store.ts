@@ -16,8 +16,9 @@ export interface State {
   board?: Board
   /** Who made the latest change: lets the canvas animate the agent's work. */
   lastBy?: 'human' | 'agent'
-  /** The agent's most recent change, for the "undo Claude" button. */
+  /** The agent's most recent change, and its name, for the "undo" button. */
   agentRev?: number
+  agentName?: string
   errors: string[]
   /** Who did what on this board, oldest first (loaded when the history panel opens). */
   history?: { oldest: number; entries: HistoryEntry[] }
@@ -86,6 +87,7 @@ export function connect(): void {
         board: { name: msg.name, rev: msg.rev, shapes: msg.shapes, log: [] },
         lastBy: msg.last,
         agentRev: msg.last === 'agent' ? msg.rev : state.agentRev,
+        agentName: msg.last === 'agent' ? msg.entry?.agent : state.agentName,
         history: fresh ? { ...history, entries: [...history.entries, msg.entry!] } : history,
       })
     } else if (msg.type === 'renamed' && msg.from === state.path) {
@@ -110,7 +112,7 @@ export function connect(): void {
 
 export function openBoard(path: string | undefined): void {
   if (path === state.path) return
-  set({ path, board: undefined, errors: [], agentRev: undefined, history: undefined, preview: undefined })
+  set({ path, board: undefined, errors: [], agentRev: undefined, agentName: undefined, history: undefined, preview: undefined })
   wantedPreview = undefined
   presence = {}
   undoStack.length = redoStack.length = 0
@@ -142,6 +144,9 @@ export function redo(): void {
   const rev = redoStack.pop()
   if (rev !== undefined) send({ type: 'undo', rev, as: 'redo' })
 }
+
+/** How an agent's name shows in the UI: "claude" → "Claude". */
+export const agentLabel = (agent?: string) => (agent ? agent[0].toUpperCase() + agent.slice(1) : 'Agent')
 
 /** Rejects the agent's latest change (sent as a human undo, so it can itself be undone). */
 export function undoAgent(rev: number): void {

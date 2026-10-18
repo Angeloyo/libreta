@@ -180,7 +180,7 @@ export function Sidebar({ library, current }: { library: Entry[]; current?: stri
       </div>
       {error && <div className="sidebar-error">{error}</div>}
       {tree(library, '')}
-      {!library.length && !naming && <p className="muted hint">No boards yet. Create one, or ask Claude to draw something.</p>}
+      {!library.length && !naming && <p className="muted hint">No boards yet. Create one, or ask your agent to draw something.</p>}
     </nav>
   )
 }

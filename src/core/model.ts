@@ -63,7 +63,7 @@ export interface Change {
 export interface Changeset {
   rev: number
   by: Author
-  /** Which agent, when `by` is 'agent' (e.g. "claude"). */
+  /** Which agent, when `by` is 'agent' (e.g. "claude", "codex"). */
   agent?: string
   label?: string
   at: number
