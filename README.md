@@ -64,6 +64,14 @@ In the browser:
 
 The "Claude changed this · Undo" button rejects Claude's latest change.
 
+**History** (top right) lists who did what, newest first:
+
+- Hover a change to highlight what it touched on the board.
+- Click it to see the board as it was then. "Restore this" makes that the current version; it's undoable.
+- Press ▶ to replay the board being built, step by step.
+
+Claude can see the same list with `libreta history`.
+
 ## Development
 
 ```sh

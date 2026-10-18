@@ -3,7 +3,8 @@ import { Canvas } from './canvas/Canvas.tsx'
 import type { Editor } from './canvas/editor.ts'
 import type { CanvasView } from './canvas/view.ts'
 import { Sidebar } from './Sidebar.tsx'
-import { connect, fromHash, openBoard, undoAgent, useStore } from './store.ts'
+import { HistoryPanel } from './HistoryPanel.tsx'
+import { connect, fromHash, openBoard, toggleHistory, undoAgent, useStore } from './store.ts'
 
 export function App() {
   const state = useStore()
@@ -34,17 +35,33 @@ export function App() {
             </button>
           )}
           {state.board && (
+            <button className={state.historyOpen ? 'on' : ''} onClick={toggleHistory} title="Who changed what">
+              History
+            </button>
+          )}
+          {state.board && (
             <button onClick={() => view.current?.fitToContent()} title="Fit to content (shift+1)">
               {Math.round(zoom * 100)}%
             </button>
           )}
           <span className={state.connected ? 'dot on' : 'dot'} title={state.connected ? 'connected' : 'reconnecting…'} />
         </header>
-        {state.board && state.path ? (
-          <Canvas board={state.board} path={state.path} lastBy={state.lastBy} view={view} editor={editor} onZoom={setZoom} />
-        ) : (
-          <div className="empty">{state.path ? 'Loading…' : 'Pick a board on the left, or create one.'}</div>
-        )}
+        <div className="workspace">
+          {state.board && state.path ? (
+            <Canvas
+              board={state.preview?.board ?? state.board}
+              path={state.path}
+              lastBy={state.lastBy}
+              readOnly={!!state.preview}
+              view={view}
+              editor={editor}
+              onZoom={setZoom}
+            />
+          ) : (
+            <div className="empty">{state.path ? 'Loading…' : 'Pick a board on the left, or create one.'}</div>
+          )}
+          {state.historyOpen && state.board && <HistoryPanel state={state} onHover={(ids) => view.current?.highlight(ids)} />}
+        </div>
       </main>
     </div>
   )

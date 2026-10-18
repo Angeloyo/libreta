@@ -11,6 +11,7 @@ import { descendants } from '../core/layout.ts'
 import { lint, lintAround } from '../core/lint.ts'
 import { getShape, type Board, type Shape, type Size } from '../core/model.ts'
 import { parseOps, type Op } from '../core/ops.ts'
+import { historyEntry, oldestRev } from '../core/history.ts'
 import { humanChangesSince, humanLines, problemLines, readView, summarize, type Detail } from '../core/view.ts'
 import { activeBoard, allRooms, applyToRoom, getRoom, revertInRoom, type Room } from './rooms.ts'
 import { UserError } from './errors.ts'
@@ -146,6 +147,7 @@ export function applyOps(room: Room, q: URLSearchParams, body: string): string {
   const dry = q.get('dry') === '1'
   const ctx = {
     by: 'agent' as const,
+    agent,
     label: q.get('label') ?? parsed.label,
     baseRev: room.seen.get(agent),
     view: room.presence?.view,
@@ -170,10 +172,28 @@ export async function diagram(room: Room, q: URLSearchParams, body: string): Pro
   })
   if (laid.errors.length) throw failed(laid.errors)
   const dry = q.get('dry') === '1'
-  const ctx = { by: 'agent' as const, label: q.get('label') ?? 'diagram', baseRev: room.seen.get(agent), view: room.presence?.view }
+  const ctx = { by: 'agent' as const, agent, label: q.get('label') ?? 'diagram', baseRev: room.seen.get(agent), view: room.presence?.view }
   const result = dry ? apply(room.board, laid.ops, ctx) : applyToRoom(room, laid.ops, ctx)
   result.notes.unshift(...laid.notes)
   return applyText(room, agent, result, dry)
+}
+
+const ago = (ms: number) => {
+  const s = Math.round((Date.now() - ms) / 1000)
+  return s < 60 ? `${s}s ago` : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago` : `${Math.floor(s / 86400)} d ago`
+}
+
+/** Who did what, newest first. */
+export function history(room: Room, q: URLSearchParams): string {
+  const { board } = room
+  const limit = Number(q.get('limit') ?? 20)
+  const rows = board.log.slice(-limit).reverse().map((cs) => {
+    const e = historyEntry(board, cs)
+    const who = e.by === 'human' ? 'human' : (e.agent ?? 'agent')
+    const counts = [e.counts.added && `+${e.counts.added}`, e.counts.edited && `~${e.counts.edited}`, e.counts.removed && `-${e.counts.removed}`].filter(Boolean).join(' ')
+    return `rev ${e.rev} · ${who} · ${e.title} · ${ago(e.at)}${counts ? ` · ${counts}` : ''}`
+  })
+  return [`history of "${room.path}" (now rev ${board.rev}; kept back to rev ${oldestRev(board)}):`, ...rows].join('\n')
 }
 
 /** Reverts a changeset: by default the agent's own latest one. */
@@ -181,7 +201,7 @@ export function undo(room: Room, q: URLSearchParams): string {
   const agent = q.get('agent') ?? 'claude'
   const rev = q.get('rev') ? Number(q.get('rev')) : room.board.log.findLast((cs) => cs.by === 'agent' && !cs.label?.startsWith('undo'))?.rev
   if (rev === undefined) throw new UserError('nothing of yours to undo in the recent history')
-  const result = revertInRoom(room, rev, 'agent')
+  const result = revertInRoom(room, rev, 'agent', agent)
   const lines = result.changeset ? [`ok rev=${result.changeset.rev} · undid rev ${rev}`, ...summarize(room.board, [result.changeset], 30)] : []
   lines.push(...result.notes)
   lines.push(...catchUp(room, agent))

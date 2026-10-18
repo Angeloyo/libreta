@@ -55,12 +55,16 @@ export interface Change {
   type: 'add' | 'update' | 'remove'
   before?: Partial<Shape>
   after?: Partial<Shape>
+  /** For removals: where the shape was in the list (its draw and layout order). */
+  index?: number
 }
 
 /** Everything one apply() did: one undo step, one entry in the log. */
 export interface Changeset {
   rev: number
   by: Author
+  /** Which agent, when `by` is 'agent' (e.g. "claude"). */
+  agent?: string
   label?: string
   at: number
   changes: Change[]
@@ -74,7 +78,7 @@ export interface Board {
   log: Changeset[]
 }
 
-export const LOG_LIMIT = 500
+export const LOG_LIMIT = 2000
 
 export interface Rect {
   x: number

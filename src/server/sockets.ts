@@ -6,7 +6,8 @@ import type { Duplex } from 'node:stream'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { parseOps } from '../core/ops.ts'
 import { tree } from './library.ts'
-import { applyToRoom, getRoom, revertInRoom, setActive, syncMessage, type Room } from './rooms.ts'
+import { historyEntry, oldestRev, shapesAt } from '../core/history.ts'
+import { applyToRoom, getRoom, restoreInRoom, revertInRoom, setActive, syncMessage, type Room } from './rooms.ts'
 
 const wss = new WebSocketServer({ noServer: true })
 const sockets = new Set<WebSocket>()
@@ -17,6 +18,9 @@ type ClientMessage =
   | { type: 'open'; path: string }
   | { type: 'ops'; ops: unknown[]; label?: string }
   | { type: 'undo'; rev: number; as: 'undo' | 'redo' }
+  | { type: 'history' }
+  | { type: 'preview'; rev: number }
+  | { type: 'restore'; rev: number }
   | { type: 'presence'; view?: { x: number; y: number; w: number; h: number }; selection?: string[]; cursor?: [number, number] }
 
 export function handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): void {
@@ -60,10 +64,15 @@ function onMessage(ws: WebSocket, msg: ClientMessage): void {
         ws.send(JSON.stringify({ type: 'error', errors }))
         ws.send(JSON.stringify(syncMessage(room)))
       } else if (result?.changeset) ws.send(JSON.stringify({ type: 'applied', rev: result.changeset.rev, as: 'edit' }))
-    } else if (msg.type === 'undo') {
-      const result = revertInRoom(room, msg.rev, 'human')
-      if (result.changeset) ws.send(JSON.stringify({ type: 'applied', rev: result.changeset.rev, as: msg.as }))
+    } else if (msg.type === 'undo' || msg.type === 'restore') {
+      const result = msg.type === 'undo' ? revertInRoom(room, msg.rev, 'human') : restoreInRoom(room, msg.rev, 'human')
+      if (result.changeset) ws.send(JSON.stringify({ type: 'applied', rev: result.changeset.rev, as: msg.type === 'undo' ? msg.as : 'edit' }))
       else ws.send(JSON.stringify({ type: 'error', errors: result.notes }))
+    } else if (msg.type === 'history') {
+      const { board } = room
+      ws.send(JSON.stringify({ type: 'history', path: room.path, oldest: oldestRev(board), entries: board.log.map((cs) => historyEntry(board, cs)) }))
+    } else if (msg.type === 'preview') {
+      ws.send(JSON.stringify({ type: 'preview', path: room.path, rev: msg.rev, shapes: shapesAt(room.board, msg.rev) ?? null }))
     }
   } catch (e) {
     ws.send(JSON.stringify({ type: 'error', errors: [(e as Error).message] }))

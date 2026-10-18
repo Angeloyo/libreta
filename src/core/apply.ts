@@ -10,6 +10,8 @@ import { autoSize, contentTop, fitHeight, fontSizeOf, textWidth } from './text.t
 
 export interface ApplyContext {
   by: Author
+  /** The agent's name, recorded in the history. */
+  agent?: string
   label?: string
   /** The rev the agent last saw. Fields the human changed after it are not overwritten. */
   baseRev?: number
@@ -54,7 +56,7 @@ export function apply(board: Board, ops: Op[], ctx: ApplyContext): ApplyResult {
   const changes = diff(board.shapes, next.shapes)
   if (!changes.length) return { ok: true, board, notes: [...run.notes, 'nothing changed'], errors: [] }
 
-  const changeset: Changeset = { rev: board.rev + 1, by: ctx.by, label: ctx.label, at: ctx.now ?? Date.now(), changes }
+  const changeset: Changeset = { rev: board.rev + 1, by: ctx.by, agent: ctx.agent, label: ctx.label, at: ctx.now ?? Date.now(), changes }
   next.rev = changeset.rev
   next.log = [...board.log, changeset].slice(-LOG_LIMIT)
   return { ok: true, board: next, changeset, notes: run.notes, errors: [] }
@@ -159,10 +161,14 @@ class Run {
     }
   }
 
-  /** After the text or font size changed: grow or shrink to fit, if the size follows the text. */
+  /**
+   * After the text or font size changed: grow or shrink to fit if the size follows the text.
+   * A fixed-size shape keeps its size, but grows taller rather than cutting the text off.
+   */
   private refit(shape: Shape): void {
     if (shape.auto === 'size') Object.assign(shape, autoSize(shape))
     else if (shape.auto === 'height') shape.h = fitHeight(shape)
+    else if (shape.kind !== 'frame') shape.h = Math.max(shape.h, fitHeight(shape))
   }
 
   /** Puts a shape where the op asks: exact spot, beside another shape, its frame's layout, or a free spot. */
@@ -390,6 +396,8 @@ export function diff(before: Shape[], after: Shape[]): Change[] {
     }
     if (Object.keys(a).length) changes.push({ id: s.id, type: 'update', before: b, after: a })
   }
-  for (const s of before) if (!now.has(s.id)) changes.push({ id: s.id, type: 'remove', before: s })
+  before.forEach((s, index) => {
+    if (!now.has(s.id)) changes.push({ id: s.id, type: 'remove', before: s, index })
+  })
   return changes
 }

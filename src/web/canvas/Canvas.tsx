@@ -12,15 +12,18 @@ interface Props {
   path: string
   /** Who made the latest change; the agent's new shapes animate in. */
   lastBy?: 'human' | 'agent'
+  /** Showing the past (history): no editing. Stepping forward one rev animates like a replay. */
+  readOnly?: boolean
   /** Filled with the canvas and its editor, for the toolbar and buttons outside it. */
   view: RefObject<CanvasView | undefined>
   editor: RefObject<Editor | undefined>
   onZoom?: (zoom: number) => void
 }
 
-export function Canvas({ board, path, lastBy, view, editor, onZoom }: Props) {
+export function Canvas({ board, path, lastBy, readOnly = false, view, editor, onZoom }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const fitted = useRef<string>(undefined)
+  const lastRev = useRef(board.rev)
   const zoomed = useRef(onZoom)
   zoomed.current = onZoom
   const [, rerender] = useReducer((n: number) => n + 1, 0)
@@ -44,23 +47,32 @@ export function Canvas({ board, path, lastBy, view, editor, onZoom }: Props) {
   useEffect(() => {
     const v = view.current!
     const first = fitted.current !== path
-    const byAgent = !first && lastBy === 'agent'
-    const changed = v.setBoard(board, byAgent)
+    const replayStep = readOnly && board.rev === lastRev.current + 1
+    lastRev.current = board.rev
+    const animate = !first && ((lastBy === 'agent' && !readOnly) || replayStep)
+    const changed = v.setBoard(board, animate)
+    editor.current!.readOnly = readOnly
     editor.current?.boardChanged()
     if (first) {
       v.fitToContent()
       fitted.current = path
-    } else if (byAgent && changed.length && !editor.current?.busy()) {
-      // Follow the agent: if it drew outside the view, glide over to show it.
+    } else if (animate && changed.length && !editor.current?.busy()) {
+      // Follow the agent (or the replay): if it drew outside the view, glide over to show it.
       v.reveal(union(changed)!)
     }
-  }, [board, path, lastBy])
+  }, [board, path, lastBy, readOnly])
 
   return (
     <div className="canvas-wrap">
-      <div className="canvas" ref={ref} />
-      {editor.current && <Toolbar editor={editor.current} />}
-      {editor.current && <StylePanel editor={editor.current} />}
+      <div className={`canvas ${readOnly ? 'past' : ''}`} ref={ref} />
+      {readOnly ? (
+        <div className="past-banner">Looking at rev {board.rev}. This is the past, so editing is off.</div>
+      ) : (
+        <>
+          {editor.current && <Toolbar editor={editor.current} />}
+          {editor.current && <StylePanel editor={editor.current} />}
+        </>
+      )}
     </div>
   )
 }

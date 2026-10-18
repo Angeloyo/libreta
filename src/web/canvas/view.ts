@@ -141,6 +141,12 @@ export class CanvasView {
     return changed
   }
 
+  /** Outlines these shapes (e.g. the ones a history entry touched). */
+  highlight(ids: string[]): void {
+    const set = new Set(ids)
+    for (const [id, entry] of this.rendered) entry.el.classList.toggle('highlight', set.has(id))
+  }
+
   /** Glides the camera so `area` is in view (zooming out if needed). Does nothing if it already is. */
   reveal(area: Rect): void {
     const view = this.visible()

@@ -4,7 +4,7 @@
 import type { WebSocket } from 'ws'
 import { apply, type ApplyContext, type ApplyResult } from '../core/apply.ts'
 import type { Author, Board, Changeset } from '../core/model.ts'
-import { revert, type RevertResult } from '../core/revert.ts'
+import { historyEntry, restore, revert, type HistoryResult } from '../core/history.ts'
 import { UserError } from './errors.ts'
 import type { Op } from '../core/ops.ts'
 import type { Presence } from '../core/view.ts'
@@ -56,21 +56,30 @@ export function applyToRoom(room: Room, ops: Op[], ctx: ApplyContext): ApplyResu
 }
 
 /** Undoes changeset `rev` (by anyone) as a new changeset by `by`. */
-export function revertInRoom(room: Room, rev: number, by: Author): RevertResult {
+export function revertInRoom(room: Room, rev: number, by: Author, agent?: string): HistoryResult {
   const target = room.board.log.find((cs) => cs.rev === rev)
   if (!target) throw new UserError(`no change with rev ${rev} in the recent history`)
-  const result = revert(room.board, target, by)
+  return commitResult(room, revert(room.board, target, by, agent))
+}
+
+/** Makes the board look as it did at `rev`, as a new changeset. */
+export function restoreInRoom(room: Room, rev: number, by: Author, agent?: string): HistoryResult {
+  return commitResult(room, restore(room.board, rev, by, agent))
+}
+
+function commitResult(room: Room, result: HistoryResult): HistoryResult {
   if (!result.changeset) return result
   room.board = result.board
   broadcast(room, syncMessage(room))
   scheduleSave(room)
-  if (by === 'human') for (const wake of room.waiters) wake(result.changeset)
+  if (result.changeset.by === 'human') for (const wake of room.waiters) wake(result.changeset)
   return result
 }
 
 export function syncMessage(room: Room) {
   const { board } = room
-  return { type: 'sync', path: room.path, name: board.name, rev: board.rev, shapes: board.shapes, last: board.log.at(-1)?.by }
+  const last = board.log.at(-1)
+  return { type: 'sync', path: room.path, name: board.name, rev: board.rev, shapes: board.shapes, last: last?.by, entry: last && historyEntry(board, last) }
 }
 
 export function broadcast(room: Room, message: object): void {

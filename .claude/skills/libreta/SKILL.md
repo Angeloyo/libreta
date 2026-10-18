@@ -152,6 +152,10 @@ How their edits reach you (in `wait` output and in `human since …` lines):
   about that shape.
 - `selection changed: nothing → [q1]`: they are pointing at q1 right now.
 - Shapes they create get ids `h1`, `h2`, …
+- `libreta history "<board>"` lists who changed what, newest first (`rev 21 · human · Connected
+  “What if…” → “Google ID linked?”`). It's handy when you come back to a board after a while.
+  They can also browse the history, replay it, and restore old versions in the browser. A restore
+  reaches you as their change.
 
 - `by=human` marks what they made. `pinned` marks shapes they placed by hand. Don't move, restyle
   or delete their things unless they ask. Add next to them instead.

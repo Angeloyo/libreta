@@ -6,7 +6,7 @@ import { center, inflate, type Point } from '../../core/geometry.ts'
 import { descendants, moveTo } from '../../core/layout.ts'
 import { childrenOf, getShape, nextId, type Board, type Kind, type Rect, type Shape } from '../../core/model.ts'
 import type { Op } from '../../core/ops.ts'
-import { FONT_FAMILY, fontSizeOf, LINE_HEIGHT, textArea } from '../../core/text.ts'
+import { FONT_FAMILY, fontSizeOf, LINE_HEIGHT, textArea, textWidth } from '../../core/text.ts'
 import { frameAt, shapeAt, shapesIn } from './hit.ts'
 import { redo, undo } from '../store.ts'
 import type { CanvasView } from './view.ts'
@@ -25,12 +25,15 @@ type Gesture =
   | { type: 'resize'; id: string; corner: Corner; orig: Rect }
   | { type: 'marquee'; start: Point; end: Point; add: boolean }
   | { type: 'create'; kind: Kind; start: Point; end: Point }
+  | { type: 'text'; start: Point; end: Point }
   | { type: 'arrow'; start: Point; end: Point; from?: string }
   | { type: 'pen'; points: number[][] }
 
 export class Editor {
   tool: Tool = 'select'
   selection: string[] = []
+  /** Looking at the past: only panning works. */
+  readOnly = false
   private view: CanvasView
   private board: () => Board | undefined
   private edit: (ops: Op[], label?: string) => void
@@ -128,7 +131,7 @@ export class Editor {
       // Synthetic events (tests) have no real pointer to capture.
     }
     this.view.stopAnimation()
-    if (e.button === 1 || this.space || this.tool === 'hand') {
+    if (e.button === 1 || this.space || this.tool === 'hand' || this.readOnly) {
       this.gesture = { type: 'pan', sx: e.clientX, sy: e.clientY, cam: this.view.cam }
       this.view.root.classList.add('panning')
       return
@@ -155,7 +158,9 @@ export class Editor {
       this.gesture = { type: 'arrow', start: p, end: p, from: from?.id }
     } else if (this.tool === 'pen') {
       this.gesture = { type: 'pen', points: [[p[0], p[1], e.pointerType === 'pen' ? e.pressure : 0.5]] }
-    } else if (this.tool !== 'text') {
+    } else if (this.tool === 'text') {
+      this.gesture = { type: 'text', start: p, end: p }
+    } else {
       this.gesture = { type: 'create', kind: this.tool, start: p, end: p }
     }
   }
@@ -202,10 +207,23 @@ export class Editor {
       if (g.moved && preview) this.edit(dropOps(board, preview, g.ids), 'move')
     } else if (g.type === 'resize' && preview) {
       const s = getShape(preview, g.id)!
-      this.edit([{ op: 'update', id: g.id, w: Math.round(s.w), h: Math.round(s.h) }, { op: 'move', id: g.id, at: [Math.round(s.x), Math.round(s.y)] }], 'resize')
+      // Text re-wraps to the new width and keeps fitting its height; other shapes take both.
+      const size = s.kind === 'text' ? { w: Math.round(s.w) } : { w: Math.round(s.w), h: Math.round(s.h) }
+      this.edit([{ op: 'update', id: g.id, ...size }, { op: 'move', id: g.id, at: [Math.round(s.x), Math.round(s.y)] }], 'resize')
     } else if (g.type === 'marquee') {
       const ids = shapesIn(board, normalize(g.start, g.end)).map((s) => s.id)
       this.select(g.add ? [...new Set([...this.selection, ...ids])] : ids)
+    } else if (g.type === 'text') {
+      // Drag out a box for the text to wrap in. Or click: on a shape to edit its text, or on
+      // empty space for text that grows as you type.
+      const box = normalize(g.start, p)
+      const dragged = box.w * this.view.cam.zoom > 8
+      const hit = dragged ? undefined : shapeAt(board, g.start, this.tolerance(), (s) => s.kind === 'pen' || s.kind === 'frame')
+      this.setTool('select')
+      if (hit) this.select([hit.id])
+      if (hit) this.startEditing(hit.id)
+      else if (dragged) this.startEditing(undefined, { at: [box.x, box.y], w: box.w })
+      else this.startEditing(undefined, { at: [g.start[0], g.start[1] - 14] })
     } else if (g.type === 'create') {
       this.create(board, g.kind, g.start, p)
     } else if (g.type === 'arrow') {
@@ -231,9 +249,7 @@ export class Editor {
       ? { op: 'create', kind: kind as 'box', id, at: [Math.round(r.x), Math.round(r.y)], w: Math.round(r.w), h: Math.round(r.h) }
       : { op: 'create', kind: kind as 'box', id, at: [Math.round(start[0]), Math.round(start[1])] }
     if (kind === 'frame') Object.assign(op, { text: 'Frame', layout: 'none' })
-    const into = frameAt(board, start, new Set())
-    if (into && kind !== 'frame') Object.assign(op, { in: into.id })
-    if (into?.layout && into.layout !== 'none') delete (op as { at?: unknown }).at
+    if (kind !== 'frame') intoFrame(board, op, start)
     this.edit([op], 'create')
     this.setTool('select')
     this.select([id])
@@ -242,17 +258,18 @@ export class Editor {
 
   private doubleClick(e: MouseEvent): void {
     const board = this.board()
-    if (!board || this.tool !== 'select') return
+    if (!board || this.tool !== 'select' || this.readOnly) return
     const p = this.view.pointAt(e)
     const hit = shapeAt(board, p, this.tolerance())
     if (hit && hit.kind !== 'pen') this.startEditing(hit.id)
-    else if (!hit) this.startEditing(undefined, p)
+    else if (!hit) this.startEditing(undefined, { at: [p[0], p[1] - 14] })
   }
 
   // ---- Keyboard ----
 
   private key(e: KeyboardEvent, down: boolean): void {
     if (this.textarea || (e.target as HTMLElement).closest?.('input, textarea')) return
+    if (this.readOnly && e.key !== ' ') return
     if (e.key === ' ') {
       this.space = down
       this.view.root.classList.toggle('pan-ready', down)
@@ -289,15 +306,18 @@ export class Editor {
 
   // ---- Text editing ----
 
-  /** Opens a text box over a shape (or, with no id, for a new text shape at `at`). */
-  startEditing(id?: string, at?: Point): void {
+  /**
+   * Opens a text box over a shape's text, or (with no id) for a new text shape whose top-left is
+   * `place.at`. A new text with a width wraps inside it; without one it grows as you type.
+   */
+  startEditing(id?: string, place?: { at: Point; w?: number }): void {
     const board = this.board()
     if (!board) return
     const shape = id ? getShape(board, id) : undefined
     if (id && (!shape || shape.kind === 'pen')) return
     const cam = this.view.cam
-    const area: Rect = shape ? (shape.kind === 'arrow' ? labelArea(board, shape) : textArea(shape)) : { x: at![0], y: at![1] - 14, w: 240, h: 28 }
-    const fontSize = (shape ? fontSizeOf(shape) : 20) * cam.zoom
+    const size = shape ? fontSizeOf(shape) : 20
+    const area: Rect = shape ? (shape.kind === 'arrow' ? labelArea(board, shape) : textArea(shape)) : { x: place!.at[0], y: place!.at[1], w: place!.w ?? 60, h: size * LINE_HEIGHT }
     const ta = document.createElement('textarea')
     ta.className = 'text-editor'
     ta.value = shape?.text ?? ''
@@ -305,24 +325,35 @@ export class Editor {
       left: `${(area.x - cam.x) * cam.zoom}px`,
       top: `${(area.y - cam.y) * cam.zoom}px`,
       width: `${Math.max(area.w, 60) * cam.zoom}px`,
-      height: `${Math.max(area.h * cam.zoom, fontSize * LINE_HEIGHT)}px`,
+      height: `${Math.max(area.h, size * LINE_HEIGHT) * cam.zoom}px`,
       fontFamily: FONT_FAMILY,
-      fontSize: `${fontSize}px`,
+      fontSize: `${size * cam.zoom}px`,
       lineHeight: String(LINE_HEIGHT),
       textAlign: !shape || shape.kind === 'text' || shape.kind === 'frame' ? 'left' : 'center',
       fontWeight: shape?.kind === 'frame' ? '700' : '400',
     })
+    // The box grows with the text: taller always, and wider too for new text without a set width.
+    const grow = () => {
+      if (!shape && place?.w === undefined) {
+        const widest = Math.max(...ta.value.split('\n').map((line) => textWidth(line, size)))
+        ta.style.width = `${Math.min(Math.max(60, widest + 12), 24 * size) * cam.zoom}px`
+      }
+      ta.style.height = 'auto'
+      ta.style.height = `${Math.max(ta.scrollHeight, size * LINE_HEIGHT * cam.zoom)}px`
+    }
+    ta.addEventListener('input', grow)
     ta.dataset.id = id ?? ''
-    ta.dataset.at = at ? at.join(',') : ''
+    ta.dataset.place = place ? JSON.stringify(place) : ''
     this.view.root.append(ta)
     this.textarea = ta
+    grow()
     ta.focus()
     ta.select()
     // Text shapes are multi-line: Enter is a new line and ⌘Enter finishes. Labels finish on Enter.
     const multiline = !shape || shape.kind === 'text'
     ta.addEventListener('keydown', (e) => {
       e.stopPropagation()
-      if (e.key === 'Escape') this.finishEditing(false)
+      if (e.key === 'Escape') this.finishEditing(true) // keep what was typed; ⌘Z takes it back
       if (e.key === 'Enter' && (multiline ? e.metaKey || e.ctrlKey : !e.shiftKey)) {
         e.preventDefault()
         this.finishEditing(true)
@@ -343,9 +374,12 @@ export class Editor {
     if (id) {
       if (getShape(board, id)?.text !== text) this.edit([{ op: 'update', id, text }], 'text')
     } else if (text) {
-      const [x, y] = ta.dataset.at!.split(',').map(Number)
+      const place = JSON.parse(ta.dataset.place!) as { at: Point; w?: number }
       const newId = nextId(board, 'h')
-      this.edit([{ op: 'create', kind: 'text', id: newId, text, at: [Math.round(x), Math.round(y - 14)] }], 'text')
+      const op: Op = { op: 'create', kind: 'text', id: newId, text, at: [Math.round(place.at[0]), Math.round(place.at[1])] }
+      if (place.w) op.w = Math.round(place.w)
+      intoFrame(board, op, place.at)
+      this.edit([op], 'text')
       this.select([newId])
     }
   }
@@ -385,7 +419,7 @@ export class Editor {
     }
     const g = this.gesture
     if (g?.type === 'marquee') rect(normalize(g.start, g.end), `stroke="${BLUE}" stroke-width="1" style="fill:${BLUE};fill-opacity:0.06"`)
-    if (g?.type === 'create') rect(normalize(g.start, g.end), `stroke="${BLUE}" stroke-width="1.5" stroke-dasharray="6 4"`)
+    if (g?.type === 'create' || g?.type === 'text') rect(normalize(g.start, g.end), `stroke="${BLUE}" stroke-width="1.5" stroke-dasharray="6 4"`)
     if (g?.type === 'arrow') parts.push(`<line x1="${g.start[0]}" y1="${g.start[1]}" x2="${g.end[0]}" y2="${g.end[1]}" stroke="${BLUE}" stroke-width="2" vector-effect="non-scaling-stroke"/>`)
     if (g?.type === 'pen') parts.push(`<polyline points="${g.points.map((p) => `${p[0]},${p[1]}`).join(' ')}" fill="none" stroke="#1e1e1e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`)
     layer.innerHTML = parts.join('')
@@ -393,6 +427,14 @@ export class Editor {
 }
 
 // ---- Helpers ----
+
+/** A new shape made inside a frame belongs to it. In a layout frame, the frame decides where. */
+function intoFrame(board: Board, op: Op, point: Point): void {
+  const frame = frameAt(board, point, new Set())
+  if (!frame || op.op !== 'create') return
+  op.in = frame.id
+  if (frame.layout && frame.layout !== 'none') delete op.at
+}
 
 function normalize(a: Point, b: Point): Rect {
   return { x: Math.min(a[0], b[0]), y: Math.min(a[1], b[1]), w: Math.abs(a[0] - b[0]), h: Math.abs(a[1] - b[1]) }

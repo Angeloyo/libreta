@@ -31,6 +31,7 @@ drawing (board defaults to the one open in the browser)
   libreta look [board]               render a PNG and print its path              --scope ...  --no-badges
   libreta wait [board]               block until the human edits the board        --timeout <seconds>
   libreta undo [board]               undo your last change (or --rev <n>)
+  libreta history [board]            who changed what, newest first              --limit <n>
   libreta guide                      how to draw well with libreta (read this first)
 
   libreta serve                      run the server in the foreground
@@ -113,6 +114,7 @@ async function main(): Promise<void> {
       title: { type: 'string' },
       timeout: { type: 'string' },
       rev: { type: 'string' },
+      limit: { type: 'string' },
       below: { type: 'string' },
       right: { type: 'string' },
       left: { type: 'string' },
@@ -165,6 +167,8 @@ async function main(): Promise<void> {
       return waitForHuman({ board, agent }, Number(opt.timeout ?? 600))
     case 'undo':
       return call('POST', '/api/undo', { board, agent, rev: opt.rev })
+    case 'history':
+      return call('GET', '/api/history', { board, limit: opt.limit })
     case 'guide':
       return call('GET', '/api/guide', {})
     default:

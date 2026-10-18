@@ -15,6 +15,7 @@ Built and tested end to end (core tests, browser checks in Orca, two agent evals
   - live board, editor (select, move, resize, shape/arrow/text/sticky/frame/pen tools, text editing, style panel)
   - undo/redo, an "Undo Claude" button, a camera that follows the agent, a glow on what the agent changed
   - library sidebar (folders, rename, drag to move, delete to trash)
+  - history panel (who did what, hover to highlight, view any past rev, restore, replay)
 - **Agent skill:** `.claude/skills/libreta/SKILL.md`.
 
 Next ideas:

@@ -6,7 +6,7 @@ import { layoutDiagram } from './diagram.ts'
 import { parseDsl } from './dsl.ts'
 import { lint } from './lint.ts'
 import { emptyBoard, getShape, type Board } from './model.ts'
-import { revert } from './revert.ts'
+import { restore, revert, shapesAt } from './history.ts'
 import { humanChangesSince, readView } from './view.ts'
 
 /** Applies line-format source, failing the test on any error. */
@@ -251,4 +251,25 @@ test('placement: a frame below another stays put when a later shape is placed be
 test('arrows: two arrows between the same shapes keep their labels apart', () => {
   const board = run(emptyBoard('t'), 'box a "A" (0,0 160x80)\nbox b "B" (600,0 160x80)\na -> b "what you changed"\nb -> a "read, apply, diagram"')
   assert.deepEqual(lint(board), [])
+})
+
+test('sizing: longer text in a fixed-size box makes it taller, never cut off', () => {
+  let board = run(emptyBoard('t'), 'box b "Box" (0,0 160x80)')
+  board = run(board, 'update b text="Box, renamed to something much longer"', { by: 'human' })
+  assert.equal(shape(board, 'b').w, 160)
+  assert.ok(shape(board, 'b').h > 80)
+  assert.deepEqual(lint(board), [])
+})
+
+test('history: the board at an earlier rev, and restoring it as a new change', () => {
+  let board = run(emptyBoard('t'), 'box a "A"', { agent: 'claude' })
+  board = run(board, 'box b "B"\na -> b', { agent: 'claude' })
+  board = run(board, 'update a text="Alpha"\ndelete b', { by: 'human' })
+  assert.deepEqual(shapesAt(board, 1)!.map((s) => s.id), ['a'])
+  assert.deepEqual(shapesAt(board, 2)!.map((s) => [s.id, s.text]), [['a', 'A'], ['b', 'B'], ['a1', '']])
+  const restored = restore(board, 2, 'human')
+  assert.equal(restored.changeset!.label, 'restore rev 2')
+  assert.deepEqual(restored.board.shapes.map((s) => s.text).sort(), ['', 'A', 'B'])
+  assert.equal(board.log[0].agent, 'claude')
+  assert.equal(shapesAt(board, -1), undefined)
 })
