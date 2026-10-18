@@ -15,8 +15,7 @@ export interface Room {
   board: Board
   clients: Set<WebSocket>
   presence?: Presence
-  /** Per agent name: the last rev it saw, and the selection it last heard about. */
-  seen: Map<string, number>
+  /** Per agent name: the selection it last heard about. (The rev it last saw lives in the board.) */
   seenSelection: Map<string, string[]>
   /** Called after every human changeset (used by `libreta wait`). */
   waiters: Set<(cs: Changeset) => void>
@@ -30,7 +29,7 @@ let active: string | undefined
 export function getRoom(path: string): Room {
   let room = rooms.get(path)
   if (!room) {
-    room = { path, board: loadBoard(path), clients: new Set(), seen: new Map(), seenSelection: new Map(), waiters: new Set() }
+    room = { path, board: loadBoard(path), clients: new Set(), seenSelection: new Map(), waiters: new Set() }
     rooms.set(path, room)
   }
   return room
@@ -74,6 +73,17 @@ function commitResult(room: Room, result: HistoryResult): HistoryResult {
   scheduleSave(room)
   if (result.changeset.by === 'human') for (const wake of room.waiters) wake(result.changeset)
   return result
+}
+
+/** The last rev `agent` saw on this board (undefined: it never looked). */
+export function seenBy(room: Room, agent: string): number | undefined {
+  return room.board.seen?.[agent]
+}
+
+export function markSeen(room: Room, agent: string, rev = room.board.rev): void {
+  if (room.board.seen?.[agent] === rev) return
+  room.board.seen = { ...room.board.seen, [agent]: rev }
+  scheduleSave(room)
 }
 
 export function syncMessage(room: Room) {

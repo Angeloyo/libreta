@@ -6,7 +6,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { extname, join, normalize } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { applyOps, diagram, guide, history, look, read, roomFor, undo, wait } from './agent.ts'
+import { applyOps, changes, diagram, guide, history, look, read, roomFor, undo, wait } from './agent.ts'
 import { UserError } from './errors.ts'
 import { cleanPath, createBoard, createFolder, findBoard, HOME, moveEntry, trashEntry, tree, treeText } from './library.ts'
 import { closeRoom, flushAll, renameRoom } from './rooms.ts'
@@ -84,6 +84,7 @@ async function api(req: IncomingMessage, url: URL, res: ServerResponse): Promise
   }
   if (route === 'POST /api/open') return open(roomFor(q.get('board')).path)
   if (route === 'GET /api/read') return read(roomFor(q.get('board')), q)
+  if (route === 'GET /api/changes') return changes(roomFor(q.get('board')), q)
   if (route === 'POST /api/apply') return applyOps(roomFor(q.get('board')), q, await readBody(req))
   if (route === 'POST /api/diagram') return diagram(roomFor(q.get('board')), q, await readBody(req))
   if (route === 'GET /api/look') return look(roomFor(q.get('board')), q)

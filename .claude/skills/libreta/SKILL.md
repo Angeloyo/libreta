@@ -12,14 +12,19 @@ that attach to shapes and route around them, and overlap checks.
 
 ## The loop
 
-1. `libreta read` — see the board as text: every shape, frame and arrow, what the human has
-   selected, open problems, and what they changed since you last looked.
+1. **Catch up at the start of every turn.** The first time, run `libreta read "<board>"` to see
+   it all: every shape, frame and arrow, what the human has selected, and open problems. After
+   that, each time the human writes to you, run `libreta changes "<board>"` before anything else.
+   They may have been editing the board for a while: that's what their message is about.
 2. Draw with `libreta diagram` (anything graph-shaped) or `libreta apply` (everything else).
-3. Read the reply: what changed, `problems:`, and `human since ...`. Fix problems before moving on.
+3. Read the reply: what changed, and `problems:`. Fix problems before moving on. If it starts with
+   "⚠ before your change, the human had edited the board", you skipped step 1: look at what they
+   did and make sure your change still makes sense.
 4. `libreta look` once at the end of a big change, and open the PNG with your Read tool to
    check it reads well. Don't use screenshots to hunt for overlaps; `problems:` is exact.
-5. When you hand the board back, run `libreta wait` **in the background**. It returns when the
-   human edits the board, telling you what they did. Read it and respond, then wait again.
+5. Then just answer and stop. **Don't watch the board**: the human edits at their own pace and
+   tells you when to look. Only if they ask you to react live ("watch the board", "tell me when I
+   change something") run `libreta wait "<board>"` in the background. It returns when they edit.
 
 **Name the board in every command**: `libreta read "Work/Checkout flow"`, `libreta apply
 "Work/Checkout flow" <<'EOF'`. Without a name, commands use the board open in the browser, and
@@ -141,7 +146,7 @@ EOF
 
 ## Working with the human
 
-How their edits reach you (in `wait` output and in `human since …` lines):
+How their edits reach you (from `libreta changes`, `libreta read`, and at the top of your replies):
 - `+ sticky h3 "…" · right of q3, outside frame qs`: a new shape and what it's next to. A sticky
   next to your question is usually their answer to it.
 - `q4 text "…" → "…"` (or `text: appended "…"` for long texts): they edited your words.

@@ -13,7 +13,7 @@ import { getShape, type Board, type Shape, type Size } from '../core/model.ts'
 import { parseOps, type Op } from '../core/ops.ts'
 import { historyEntry, oldestRev } from '../core/history.ts'
 import { humanChangesSince, humanLines, problemLines, readView, summarize, type Detail } from '../core/view.ts'
-import { activeBoard, allRooms, applyToRoom, getRoom, revertInRoom, type Room } from './rooms.ts'
+import { activeBoard, allRooms, applyToRoom, getRoom, markSeen, revertInRoom, seenBy, type Room } from './rooms.ts'
 import { UserError } from './errors.ts'
 import { findBoard } from './library.ts'
 import { renderPng, writePng } from './png.ts'
@@ -44,8 +44,8 @@ function selectionLine(room: Room, agent: string): string {
 
 /** What the human changed since `agent` last looked, then mark everything as seen. */
 function catchUp(room: Room, agent: string): string[] {
-  const seen = room.seen.get(agent)
-  room.seen.set(agent, room.board.rev)
+  const seen = seenBy(room, agent)
+  markSeen(room, agent)
   if (seen === undefined) return []
   return humanLines(seen, humanChangesSince(room.board, seen))
 }
@@ -78,7 +78,7 @@ export function read(room: Room, q: URLSearchParams): string {
   const agent = q.get('agent') ?? 'claude'
   const only = scopeIds(room, q.get('scope'))
   const problems = lint(room.board).filter((p) => !only || p.ids.some((id) => only.has(id)))
-  const seen = room.seen.get(agent)
+  const seen = seenBy(room, agent)
   const text = readView(room.board, {
     title: room.path,
     detail: (q.get('detail') as Detail) ?? 'normal',
@@ -87,9 +87,23 @@ export function read(room: Room, q: URLSearchParams): string {
     problems,
     humanSince: seen === undefined ? undefined : { rev: seen, lines: humanChangesSince(room.board, seen) },
   })
-  room.seen.set(agent, room.board.rev)
+  markSeen(room, agent)
   room.seenSelection.set(agent, room.presence?.selection ?? [])
   return text
+}
+
+/**
+ * What the human changed since this agent last looked (and their selection), without the whole
+ * board. Cheap enough to run at the start of every turn.
+ */
+export function changes(room: Room, q: URLSearchParams): string {
+  const agent = q.get('agent') ?? 'claude'
+  const seen = seenBy(room, agent)
+  if (seen === undefined) return `you haven't looked at "${room.path}" yet — start with: libreta read "${room.path}"`
+  const lines = humanChangesSince(room.board, seen)
+  markSeen(room, agent)
+  const head = lines.length ? `the human changed "${room.path}" since you last looked (rev ${seen} → ${room.board.rev}):` : `no changes on "${room.path}" since you last looked (rev ${room.board.rev})`
+  return [head, ...lines.map((l) => `- ${l}`), selectionLine(room, agent)].join('\n')
 }
 
 interface Parsed {
@@ -136,8 +150,11 @@ function applyText(room: Room, agent: string, result: ApplyResult, dry: boolean)
   if (notes.length) lines.push('notes:', ...notes.map((n) => `- ${n}`))
   const changed = new Set(cs?.changes.map((c) => c.id) ?? [])
   lines.push(...problemLines(changed.size ? lintAround(result.board, changed) : []))
-  if (!dry) lines.push(...catchUp(room, agent))
-  return lines.join('\n')
+  if (dry) return lines.join('\n')
+  // If the human changed the board since this agent last looked, say so first: it matters more.
+  const caught = catchUp(room, agent)
+  const news = caught.length > 1 ? ['⚠ before your change, the human had edited the board:', ...caught.slice(1), ''] : []
+  return [...news, ...lines, ...(news.length ? [] : caught)].join('\n')
 }
 
 export function applyOps(room: Room, q: URLSearchParams, body: string): string {
@@ -149,7 +166,7 @@ export function applyOps(room: Room, q: URLSearchParams, body: string): string {
     by: 'agent' as const,
     agent,
     label: q.get('label') ?? parsed.label,
-    baseRev: room.seen.get(agent),
+    baseRev: seenBy(room, agent),
     view: room.presence?.view,
     where: parsed.where,
   }
@@ -172,7 +189,7 @@ export async function diagram(room: Room, q: URLSearchParams, body: string): Pro
   })
   if (laid.errors.length) throw failed(laid.errors)
   const dry = q.get('dry') === '1'
-  const ctx = { by: 'agent' as const, agent, label: q.get('label') ?? 'diagram', baseRev: room.seen.get(agent), view: room.presence?.view }
+  const ctx = { by: 'agent' as const, agent, label: q.get('label') ?? 'diagram', baseRev: seenBy(room, agent), view: room.presence?.view }
   const result = dry ? apply(room.board, laid.ops, ctx) : applyToRoom(room, laid.ops, ctx)
   result.notes.unshift(...laid.notes)
   return applyText(room, agent, result, dry)
@@ -232,11 +249,11 @@ export function look(room: Room, q: URLSearchParams): string {
 export function wait(room: Room, q: URLSearchParams, signal: AbortSignal): Promise<string | null> {
   const agent = q.get('agent') ?? 'claude'
   const timeout = Math.min(Number(q.get('timeout') ?? 240), 240) * 1000
-  const seen = room.seen.get(agent) ?? room.board.rev
-  room.seen.set(agent, seen)
+  const seen = seenBy(room, agent) ?? room.board.rev
+  markSeen(room, agent, seen)
   const report = () => {
     const lines = humanChangesSince(room.board, seen)
-    room.seen.set(agent, room.board.rev)
+    markSeen(room, agent)
     return [
       `the human changed "${room.path}" (rev ${seen} → ${room.board.rev}):`,
       ...lines.map((l) => `- ${l}`),

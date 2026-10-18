@@ -186,7 +186,9 @@ function describeUpdate(c: Change, board: Board): string | undefined {
     const [ax, ay] = [a.x ?? now?.x, a.y ?? now?.y]
     if (pos(bx, by) !== pos(ax, ay)) parts.push(`moved ${pos(bx, by)} → ${pos(ax, ay)}`)
   }
-  if ((changed('w') || changed('h')) && now?.kind !== 'pen') {
+  // A shape that fits its text resizes when the text changes; that's not worth a mention.
+  const refitted = changed('text') && !!now?.auto
+  if ((changed('w') || changed('h')) && now?.kind !== 'pen' && !refitted) {
     const size = (w: unknown, h: unknown) => `${round10(Number(w))}x${round10(Number(h))}`
     const from = size(b.w ?? now?.w, b.h ?? now?.h)
     const to = size(a.w ?? now?.w, a.h ?? now?.h)

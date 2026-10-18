@@ -39,7 +39,9 @@ Then ask Claude to explain something on the board. Claude will:
 - run `libreta read` to see the board, what you have selected, and what you changed
 - draw with `libreta diagram` (auto-laid-out graphs) or `libreta apply` (anything else)
 - check its work with `libreta look` (a PNG of the board)
-- run `libreta wait` in the background, so your edits wake it up
+- check what you changed (`libreta changes`) at the start of each turn, so you can edit at your
+  own pace and just tell Claude when to look (ask it to "watch the board" if you want it to react
+  live instead)
 
 In the browser:
 

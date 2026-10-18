@@ -76,6 +76,8 @@ export interface Board {
   shapes: Shape[]
   /** Recent changesets, newest last. Capped at LOG_LIMIT. */
   log: Changeset[]
+  /** Per agent name: the last rev it saw, so "what changed since you looked" survives restarts. */
+  seen?: Record<string, number>
 }
 
 export const LOG_LIMIT = 2000

@@ -24,12 +24,13 @@ boards
   libreta open [board]               show a board in the browser
 
 drawing (board defaults to the one open in the browser)
+  libreta changes [board]            what the human changed since you last looked (run it at the start of each turn)
   libreta read [board]               the board as text   --scope all|view|selection|frame:<id>|<id,id>  --detail outline|normal|full
   libreta apply [board] <<'EOF'      apply ops from stdin (line format or JSON)   --label "..."  --dry-run
   libreta diagram [board] <<'EOF'    lay out nodes + arrows automatically         --frame <id> --title "..." --direction right|down
                                      --below|--right|--left|--above <id> [--gap n]  --spacing compact|normal|loose  --size s|m|l|xl  --dry-run
   libreta look [board]               render a PNG and print its path              --scope ...  --no-badges
-  libreta wait [board]               block until the human edits the board        --timeout <seconds>
+  libreta wait [board]               block until the human edits (only if asked to watch live)  --timeout <seconds>
   libreta undo [board]               undo your last change (or --rev <n>)
   libreta history [board]            who changed what, newest first              --limit <n>
   libreta guide                      how to draw well with libreta (read this first)
@@ -151,6 +152,8 @@ async function main(): Promise<void> {
       return library('rm', { path: a })
     case 'open':
       return call('POST', '/api/open', { board })
+    case 'changes':
+      return call('GET', '/api/changes', { board, agent })
     case 'read':
       return call('GET', '/api/read', { board, agent, scope: opt.scope, detail: opt.detail })
     case 'apply':
